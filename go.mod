@@ -1,8 +1,9 @@
 module easy_discord_bot
 
-go 1.25.10
+go 1.26.1
 
 require (
+	github.com/andre-carbajal/go-mcstatus v1.0.0 // indirect
 	github.com/disgoorg/disgo v0.19.4 // indirect
 	github.com/disgoorg/godave v0.1.0 // indirect
 	github.com/disgoorg/json/v2 v2.0.0 // indirect

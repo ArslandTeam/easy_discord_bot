@@ -1,3 +1,5 @@
+github.com/andre-carbajal/go-mcstatus v1.0.0 h1:M1Pv+knQXv/Rjy/npHn8Jhn99nKQJCgQ4X6+uwWuxuI=
+github.com/andre-carbajal/go-mcstatus v1.0.0/go.mod h1:MkHXPerVCouRGe9oFTs24WJfrrCmQyf3zER3YqRqq9o=
 github.com/disgoorg/disgo v0.19.4 h1:Jz7UHte4bOGESNbNIbPhZCdX9iJw5PHU7Fu2Afdi+bY=
 github.com/disgoorg/disgo v0.19.4/go.mod h1:NnV63iw4lJdF1fnV0gX27XR43ZgRGqnL122svRMTgTE=
 github.com/disgoorg/godave v0.1.0 h1:3g0Zqzz+zNaxQTVLfCnl5eZKGqZk6cM/JLLbMKCtZQQ=
