@@ -69,9 +69,9 @@ func main() {
 		slog.Error("error while connecting to gateway", slog.Any("err", err))
 	}
 
-	updateServerStatus()
+	updateServerStatus(*client)
 
-	go loopPingStatusServer()
+	go loopPingStatusServer(*client)
 
 	http.HandleFunc("/", httpStatusHandler)
 
