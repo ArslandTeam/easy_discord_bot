@@ -40,6 +40,10 @@ var (
 				discord.LocaleRussian: "получить статус сервера Minecraft",
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "infoServer",
+			Description: "get info server Minecraft",
+		},
 	}
 )
 
@@ -69,9 +73,7 @@ func main() {
 		slog.Error("error while connecting to gateway", slog.Any("err", err))
 	}
 
-	updateServerStatus(*client)
-
-	go loopPingStatusServer(*client)
+	go updateDiscordStatus(*client)
 
 	http.HandleFunc("/", httpStatusHandler)
 
@@ -114,5 +116,9 @@ func commandListener(event *events.ApplicationCommandInteractionCreate) {
 		if err != nil {
 			slog.Error("error on sending response", slog.Any("err", err))
 		}
+	}
+
+	if data.CommandName() == "infoServer" {
+		context.TODO()
 	}
 }

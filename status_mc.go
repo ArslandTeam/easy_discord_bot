@@ -12,12 +12,47 @@ import (
 	"github.com/disgoorg/disgo/gateway"
 )
 
-// TODO: вынести обновление статуса в отдельную функцию
-func updateServerStatus(client bot.Client) {
+func updateDiscordStatus(client bot.Client) {
+	go func() {
+		checkAndExecute := func() {
+			status, err := updateServerStatus()
+			if err != nil || !status.Online {
+				if err != nil {
+					slog.Error("failed to fetch server status", slog.Any("err", err))
+				}
+
+				_ = client.SetPresence(context.Background(),
+					gateway.WithOnlineStatus(discord.OnlineStatusDND),
+					gateway.WithPlayingActivity("Сервер оффлайн"),
+				)
+				return
+			}
+
+			err = client.SetPresence(context.Background(),
+				gateway.WithOnlineStatus(discord.OnlineStatusOnline),
+				gateway.WithPlayingActivity(fmt.Sprintf("Онлайн: %d/%d", status.PlayersNow, status.PlayersMax)),
+			)
+
+			if err != nil {
+				slog.Error("failed to update discord presence", slog.Any("err", err))
+			}
+		}
+
+		checkAndExecute()
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			checkAndExecute()
+		}
+	}()
+}
+
+func updateServerStatus() (ServerStatus, error) {
 	server, err := mcstatus.NewJavaServer(minecraftServerIP)
 	if err != nil {
 		slog.Error("error init address minecraft server", slog.Any("err", err))
-		return
+		return ServerStatus{}, err
 	}
 
 	status, err := server.Status()
@@ -28,12 +63,7 @@ func updateServerStatus(client bot.Client) {
 			Online: false,
 		}
 		statusMutex.Unlock()
-
-		_ = client.SetPresence(context.Background(),
-			gateway.WithOnlineStatus(discord.OnlineStatusDND),
-			gateway.WithPlayingActivity("Сервер оффлайн"),
-		)
-		return
+		return cachedStatus, err
 	}
 
 	if resp, ok := status.(*mcstatus.JavaStatusResponse); ok {
@@ -43,25 +73,12 @@ func updateServerStatus(client bot.Client) {
 			PlayersMax: resp.Players.Max,
 		}
 		statusMutex.Unlock()
-
-		activityText := fmt.Sprintf("Онлайн: %d/%d", resp.Players.Online, resp.Players.Max)
-		err := client.SetPresence(context.Background(),
-			gateway.WithOnlineStatus(discord.OnlineStatusOnline),
-			gateway.WithPlayingActivity(activityText),
-		)
-		if err != nil {
-			slog.Error("failed to update discord presence", slog.Any("err", err))
-		}
-	} else {
-		statusMutex.Unlock()
+		return cachedStatus, nil
 	}
-}
 
-func loopPingStatusServer(client bot.Client) {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		updateServerStatus(client)
+	cachedStatus = ServerStatus{
+		Online: false,
 	}
+	statusMutex.Unlock()
+	return cachedStatus, fmt.Errorf("invalid status response")
 }
