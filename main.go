@@ -15,7 +15,6 @@ import (
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
-	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/snowflake/v2"
 )
 
@@ -41,21 +40,17 @@ var (
 			},
 		},
 		discord.SlashCommandCreate{
-			Name:        "infoServer",
+			Name:        "infoserver",
 			Description: "get info server Minecraft",
 		},
 	}
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	client, err := disgo.New(os.Getenv("DISCORD_TOKEN"),
 		bot.WithDefaultGateway(),
-		bot.WithGatewayConfigOpts(
-			gateway.WithPresenceOpts(
-				gateway.WithOnlineStatus(discord.OnlineStatusIdle),
-				gateway.WithPlayingActivity(""),
-			),
-		),
 		bot.WithEventListenerFunc(commandListener),
 	)
 	if err != nil {
@@ -73,7 +68,7 @@ func main() {
 		slog.Error("error while connecting to gateway", slog.Any("err", err))
 	}
 
-	go updateDiscordStatus(*client)
+	go updateDiscordStatus(ctx, *client)
 
 	http.HandleFunc("/", httpStatusHandler)
 
@@ -101,23 +96,38 @@ func httpStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 func commandListener(event *events.ApplicationCommandInteractionCreate) {
 	data := event.SlashCommandInteractionData()
+
 	if data.CommandName() == "ping" {
+		err := event.DeferCreateMessage(false)
+		if err != nil {
+			slog.Error("error on deferring message", slog.Any("err", err))
+			return
+		}
 
-		statusMutex.RLock()
-		currentStatus := cachedStatus
-		statusMutex.RUnlock()
+		status, err := updateServerStatus()
+		if err != nil {
+			slog.Error("failed to fetch live server status for ping command", slog.Any("err", err))
+			status.Online = false
+		}
 
-		err := event.CreateMessage(discord.NewMessageCreate().
-			WithContent(fmt.Sprintf(
-				"Онлайн: %d/%d",
-				currentStatus.PlayersNow, currentStatus.PlayersMax,
-			)),
+		statusMutex.Lock()
+		cachedStatus = status
+		statusMutex.Unlock()
+
+		var content string
+		if status.Online {
+			content = fmt.Sprintf("Онлайн: %d/%d", status.PlayersNow, status.PlayersMax)
+		} else {
+			content = "Сервер оффлайн"
+		}
+
+		_, err = event.Client().Rest.UpdateInteractionResponse(event.ApplicationID(), event.Token(),
+			discord.NewMessageUpdate().WithContent(content),
 		)
 		if err != nil {
-			slog.Error("error on sending response", slog.Any("err", err))
+			slog.Error("error on updating ping response", slog.Any("err", err))
 		}
 	}
-
 	if data.CommandName() == "infoServer" {
 		context.TODO()
 	}

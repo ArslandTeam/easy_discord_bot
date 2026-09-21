@@ -12,38 +12,52 @@ import (
 	"github.com/disgoorg/disgo/gateway"
 )
 
-func updateDiscordStatus(client bot.Client) {
+func updateDiscordStatus(ctx context.Context, client bot.Client) {
 	go func() {
-		checkAndExecute := func() {
+		update := func() {
 			status, err := updateServerStatus()
-			if err != nil || !status.Online {
-				if err != nil {
-					slog.Error("failed to fetch server status", slog.Any("err", err))
-				}
-
-				_ = client.SetPresence(context.Background(),
-					gateway.WithOnlineStatus(discord.OnlineStatusDND),
-					gateway.WithPlayingActivity("Сервер оффлайн"),
-				)
-				return
+			if err != nil {
+				slog.Error("failed to fetch server status", slog.Any("err", err))
+				status.Online = false
 			}
 
-			err = client.SetPresence(context.Background(),
-				gateway.WithOnlineStatus(discord.OnlineStatusOnline),
-				gateway.WithPlayingActivity(fmt.Sprintf("Онлайн: %d/%d", status.PlayersNow, status.PlayersMax)),
-			)
+			statusMutex.Lock()
+			cachedStatus = status
+			statusMutex.Unlock()
 
+			var statusText string
+			var onlineStatus discord.OnlineStatus
+
+			if status.Online {
+				statusText = fmt.Sprintf("Онлайн: %d/%d", status.PlayersNow, status.PlayersMax)
+				onlineStatus = discord.OnlineStatusOnline
+			} else {
+				statusText = "Сервер оффлайн"
+				onlineStatus = discord.OnlineStatusDND
+			}
+
+			err = client.SetPresence(ctx,
+				gateway.WithOnlineStatus(onlineStatus),
+				gateway.WithPlayingActivity(statusText),
+			)
 			if err != nil {
 				slog.Error("failed to update discord presence", slog.Any("err", err))
 			}
 		}
 
-		checkAndExecute()
+		update()
+
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			checkAndExecute()
+		for {
+			select {
+			case <-ticker.C:
+				update()
+			case <-ctx.Done():
+				slog.Info("stopping discord status updater")
+				return
+			}
 		}
 	}()
 }
@@ -56,29 +70,21 @@ func updateServerStatus() (ServerStatus, error) {
 	}
 
 	status, err := server.Status()
-
-	statusMutex.Lock()
 	if err != nil {
-		cachedStatus = ServerStatus{
+		slog.Error("failed to get minecraft server status", slog.Any("err", err))
+		return ServerStatus{}, fmt.Errorf("get server status: %w", err)
+	}
+
+	resp, ok := status.(*mcstatus.JavaStatusResponse)
+	if !ok {
+		return ServerStatus{
 			Online: false,
-		}
-		statusMutex.Unlock()
-		return cachedStatus, err
+		}, fmt.Errorf("unexpected status response type: %T", status)
 	}
 
-	if resp, ok := status.(*mcstatus.JavaStatusResponse); ok {
-		cachedStatus = ServerStatus{
-			Online:     true,
-			PlayersNow: resp.Players.Online,
-			PlayersMax: resp.Players.Max,
-		}
-		statusMutex.Unlock()
-		return cachedStatus, nil
-	}
-
-	cachedStatus = ServerStatus{
-		Online: false,
-	}
-	statusMutex.Unlock()
-	return cachedStatus, fmt.Errorf("invalid status response")
+	return ServerStatus{
+		Online:     true,
+		PlayersNow: resp.Players.Online,
+		PlayersMax: resp.Players.Max,
+	}, nil
 }
