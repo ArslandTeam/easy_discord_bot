@@ -44,7 +44,7 @@ func main() {
 	go func() {
 
 		s := &http.Server{
-			Addr:           fmt.Sprintf("%s:%s", os.Getenv("ADDRES"), os.Getenv("PORT")),
+			Addr:           fmt.Sprintf("%s:%s", os.Getenv("ADDRESS"), os.Getenv("PORT")),
 			Handler:        handler,
 			ReadTimeout:    10 * time.Second,
 			WriteTimeout:   10 * time.Second,
@@ -66,7 +66,7 @@ func main() {
 				log.Println(errDiscord)
 
 			} else {
-				statusText := fmt.Sprintf("Online: %d/%d 🎮", status.OnlinePlayers, status.MaxPlayers)
+				statusText := fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
 
 				errDiscord := client.SetPresence(context.Background(),
 					gateway.WithOnlineStatus(discord.OnlineStatusOnline),
@@ -83,4 +83,5 @@ func main() {
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM)
 	<-s
+	client.Close(context.TODO())
 }

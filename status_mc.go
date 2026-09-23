@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"log"
 	"os"
 
 	"github.com/andre-carbajal/go-mcstatus"
@@ -17,12 +16,16 @@ type ResponseServerStatus struct {
 func pingMinecraftJavaServer() (ResponseServerStatus, error) {
 	server, err := mcstatus.NewJavaServer(os.Getenv("MINECRAFT_IP"))
 	if err != nil {
-		log.Fatal(err)
+		return ResponseServerStatus{
+			IsOnline: false,
+		}, errors.New("Error create client")
 	}
 
 	status, err := server.Status()
 	if err != nil {
-		log.Fatal(err)
+		return ResponseServerStatus{
+			IsOnline: false,
+		}, errors.New("Error server unavailable")
 	}
 
 	resp, ok := status.(*mcstatus.JavaStatusResponse)
