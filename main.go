@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +17,20 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
+	"github.com/disgoorg/snowflake/v2"
+)
+
+// INFO позже вынести var ( commands ) в отдельный модуль
+var (
+	commands = []discord.ApplicationCommandCreate{
+		discord.SlashCommandCreate{
+			Name:        "ping",
+			Description: "get status server minecraft",
+			DescriptionLocalizations: map[discord.Locale]string{
+				discord.LocaleRussian: "получить актуальный статус сервера Minecraft",
+			},
+		},
+	}
 )
 
 func main() {
@@ -27,9 +42,13 @@ func main() {
 				gateway.IntentDirectMessages,
 			),
 		),
-		bot.WithEventListenerFunc(func(e *events.MessageCreate) {
-		}),
+		bot.WithEventListenerFunc(commandListener),
 	)
+
+	if _, err = client.Rest.SetGuildCommands(client.ApplicationID, snowflake.GetEnv("GUILD_ID"), commands); err != nil {
+		panic("error while registering commands: " + err.Error())
+	}
+
 	if err != nil {
 		panic(err)
 	}
@@ -84,4 +103,23 @@ func main() {
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM)
 	<-s
 	client.Close(context.TODO())
+}
+
+func commandListener(event *events.ApplicationCommandInteractionCreate) {
+	data := event.SlashCommandInteractionData()
+	if data.CommandName() == "ping" {
+		status, err := pingMinecraftJavaServer()
+
+		if err != nil {
+			log.Println(err)
+			err = event.CreateMessage(discord.NewMessageCreate().WithContent("Server offline"))
+		} else {
+			statusText := fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
+			err = event.CreateMessage(discord.NewMessageCreate().WithContent(statusText))
+		}
+
+		if err != nil {
+			event.Client().Logger.Error("error on sending response", slog.Any("err", err))
+		}
+	}
 }
