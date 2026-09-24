@@ -18,6 +18,7 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/joho/godotenv"
 )
 
 // INFO позже вынести var ( commands ) в отдельный модуль
@@ -41,6 +42,11 @@ var (
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Warning: .env file not found, using system environment variables")
+	}
+
 	client, err := disgo.New(os.Getenv("TOKEN"),
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(

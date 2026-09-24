@@ -18,7 +18,7 @@ type ResponseServerInfo struct {
 }
 
 func pingMinecraftJavaServer() (ResponseServerInfo, error) {
-	server, err := mcstatus.NewJavaServer(os.Getenv("MINECRAFT_IP"))
+	server, err := mcstatus.NewJavaServer(os.Getenv("MINECRAFT_ADDRESS"))
 	if err != nil {
 		return ResponseServerInfo{
 			IsOnline: false,
@@ -46,6 +46,6 @@ func pingMinecraftJavaServer() (ResponseServerInfo, error) {
 		OnlinePlayers:    resp.Players.Online,
 		VersionMinecraft: resp.Version.Name,
 		Description:      fmt.Sprint(resp.Description),
-		Latency:          resp.Latency,
+		Latency:          resp.GetLatency(),
 	}, nil
 }
