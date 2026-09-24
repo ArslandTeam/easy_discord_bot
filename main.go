@@ -80,23 +80,23 @@ func main() {
 	go func(client *bot.Client) {
 		for {
 			status, err := pingMinecraftJavaServer()
+			var statusText = "Server offline"
+			var onlineStatus = discord.OnlineStatusDND
+
 			if err != nil {
 				log.Println(err)
-				errDiscord := client.SetPresence(context.Background(),
-					gateway.WithOnlineStatus(discord.OnlineStatusDND),
-					gateway.WithCustomActivity("Server offline"),
-				)
-				log.Println(errDiscord)
-
 			} else {
-				statusText := fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
+				onlineStatus = discord.OnlineStatusOnline
+				statusText = fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
+			}
 
-				errDiscord := client.SetPresence(context.Background(),
-					gateway.WithOnlineStatus(discord.OnlineStatusOnline),
-					gateway.WithCustomActivity(statusText),
-				)
+			errDiscord := client.SetPresence(context.Background(),
+				gateway.WithOnlineStatus(onlineStatus),
+				gateway.WithCustomActivity(statusText),
+			)
+
+			if errDiscord != nil {
 				log.Println(errDiscord)
-
 			}
 
 			time.Sleep(400 * time.Second)
