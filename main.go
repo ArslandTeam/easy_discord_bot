@@ -52,6 +52,10 @@ func main() {
 		bot.WithEventListenerFunc(commandListener),
 	)
 
+	if err != nil {
+		panic(err)
+	}
+
 	if _, err = client.Rest.SetGuildCommands(client.ApplicationID, snowflake.GetEnv("GUILD_ID"), commands); err != nil {
 		panic("error while registering commands: " + err.Error())
 	}
