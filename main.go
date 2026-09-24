@@ -30,6 +30,13 @@ var (
 				discord.LocaleRussian: "получить актуальный статус сервера Minecraft",
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "infoserver",
+			Description: "get full info server",
+			DescriptionLocalizations: map[discord.Locale]string{
+				discord.LocaleRussian: "получить полную ифнормацию о сервере",
+			},
+		},
 	}
 )
 
@@ -49,9 +56,6 @@ func main() {
 		panic("error while registering commands: " + err.Error())
 	}
 
-	if err != nil {
-		panic(err)
-	}
 	if err = client.OpenGateway(context.TODO()); err != nil {
 		panic(err)
 	}
@@ -118,6 +122,32 @@ func commandListener(event *events.ApplicationCommandInteractionCreate) {
 			err = event.CreateMessage(discord.NewMessageCreate().WithContent(statusText))
 		}
 
+		if err != nil {
+			event.Client().Logger.Error("error on sending response", slog.Any("err", err))
+		}
+	}
+
+	// TODO вынести настройки embed в отедельный json файл и там их редактивировать
+	if data.CommandName() == "infoserver" {
+		status, err := pingMinecraftJavaServer()
+
+		var embed discord.Embed
+
+		if err != nil {
+			log.Println(err)
+			embed = discord.NewEmbed().WithTitle("Status server").
+				WithDescription("**Server offline**").
+				WithColor(0xFF0000)
+		} else {
+			embed = discord.NewEmbed().WithTitle("Status server").
+				WithColor(0x00FF00).
+				AddField("Online", fmt.Sprintf("%d/%d", status.OnlinePlayers, status.MaxPlayers), false).
+				AddField("Version", fmt.Sprintf("%s", status.VersionMinecraft), true).
+				AddField("Ping server", fmt.Sprintf("%d ms", status.Latency), true).
+				AddField("MOTD", status.Description, false)
+		}
+
+		err = event.CreateMessage(discord.NewMessageCreate().WithEmbeds(embed))
 		if err != nil {
 			event.Client().Logger.Error("error on sending response", slog.Any("err", err))
 		}
