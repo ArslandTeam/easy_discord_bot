@@ -18,7 +18,6 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/joho/godotenv"
 )
 
 // INFO позже вынести var ( commands ) в отдельный модуль
@@ -42,12 +41,14 @@ var (
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Warning: .env file not found, using system environment variables")
+	if _, err := os.Stat(".env"); os.IsNotExist(err) {
+		initConfig()
+		os.Exit(0)
 	}
 
-	client, err := disgo.New(os.Getenv("TOKEN"),
+	loadConfig()
+
+	client, err := disgo.New(token,
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(
 				gateway.IntentGuilds,
@@ -77,7 +78,7 @@ func main() {
 	go func() {
 
 		s := &http.Server{
-			Addr:           fmt.Sprintf("%s:%s", os.Getenv("ADDRESS"), os.Getenv("PORT")),
+			Addr:           fmt.Sprintf("%s:%s", address, port),
 			Handler:        handler,
 			ReadTimeout:    10 * time.Second,
 			WriteTimeout:   10 * time.Second,
@@ -109,7 +110,7 @@ func main() {
 				log.Println(errDiscord)
 			}
 
-			time.Sleep(400 * time.Second)
+			time.Sleep(pingInterval)
 		}
 	}(client)
 

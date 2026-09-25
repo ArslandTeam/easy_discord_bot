@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/andre-carbajal/go-mcstatus"
 )
@@ -18,7 +17,7 @@ type ResponseServerInfo struct {
 }
 
 func pingMinecraftJavaServer() (ResponseServerInfo, error) {
-	server, err := mcstatus.NewJavaServer(os.Getenv("MINECRAFT_ADDRESS"))
+	server, err := mcstatus.NewJavaServer(minecraftAddress)
 	if err != nil {
 		return ResponseServerInfo{
 			IsOnline: false,
@@ -46,6 +45,6 @@ func pingMinecraftJavaServer() (ResponseServerInfo, error) {
 		OnlinePlayers:    resp.Players.Online,
 		VersionMinecraft: resp.Version.Name,
 		Description:      fmt.Sprint(resp.Description),
-		Latency:          resp.GetLatency(),
+		Latency:          resp.Latency,
 	}, nil
 }
