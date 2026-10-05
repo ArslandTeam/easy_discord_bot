@@ -15,7 +15,7 @@ type ResponseServerInfo struct {
 	OnlinePlayers    int64
 	Description      string
 	VersionMinecraft string
-	Latency          time.Duration
+	Latency          int64
 }
 
 func pingMinecraftJavaServer() (ResponseServerInfo, error) {
@@ -33,6 +33,6 @@ func pingMinecraftJavaServer() (ResponseServerInfo, error) {
 		OnlinePlayers:    *response.Players.Online,
 		VersionMinecraft: response.Version.NameClean,
 		Description:      response.MOTD.Clean,
-		Latency:          response.Latency,
+		Latency:          response.Latency.Milliseconds(),
 	}, nil
 }
