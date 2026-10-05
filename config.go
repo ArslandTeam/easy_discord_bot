@@ -17,6 +17,7 @@ var (
 	address          string
 	port             string
 	minecraftAddress string
+	minecraftPort    uint16
 	pingInterval     time.Duration
 )
 
@@ -45,10 +46,17 @@ func loadConfig() {
 	port = os.Getenv("PORT")
 	minecraftAddress = os.Getenv("MINECRAFT_ADDRESS")
 
+	val, err := strconv.ParseUint(os.Getenv("MINECRAFT_PORT"), 10, 16)
+	if err != nil {
+		log.Fatal("MINECRAFT_PORT not set or invalid")
+	}
+	minecraftPort = uint16(val)
+
 	intervalSec, err := strconv.Atoi(os.Getenv("PING_INTERVAL"))
 	if err != nil || intervalSec <= 0 {
 		log.Fatalln("PING_INTERVAL not set or invalid")
-	} else {
-		pingInterval = time.Duration(intervalSec) * time.Second
 	}
+
+	pingInterval = time.Duration(intervalSec) * time.Second
+
 }

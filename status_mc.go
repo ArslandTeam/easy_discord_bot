@@ -2,62 +2,37 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/Tnze/go-mc/bot"
-	"github.com/Tnze/go-mc/chat"
+	"github.com/mcstatus-io/mcutil/v3"
 )
 
 // TODO переписать
 type ResponseServerInfo struct {
 	IsOnline         bool
-	MaxPlayers       int
-	OnlinePlayers    int
+	MaxPlayers       int64
+	OnlinePlayers    int64
 	Description      string
 	VersionMinecraft string
-	Latency          int64
-}
-
-type mcStatusResp struct {
-	Version struct {
-		Name string `json:"name"`
-	} `json:"version"`
-	Players struct {
-		Max    int `json:"max"`
-		Online int `json:"online"`
-	} `json:"players"`
-	Description chat.Message `json:"description"`
+	Latency          time.Duration
 }
 
 func pingMinecraftJavaServer() (ResponseServerInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	startTime := time.Now()
-
-	respBytes, delay, err := bot.PingAndListContext(ctx, minecraftAddress)
+	response, err := mcutil.Status(ctx, minecraftAddress, minecraftPort)
 	if err != nil {
 		return ResponseServerInfo{IsOnline: false}, fmt.Errorf("Ping failed: %w", err)
 	}
 
-	var status mcStatusResp
-	if err := json.Unmarshal(respBytes, &status); err != nil {
-		return ResponseServerInfo{IsOnline: false}, fmt.Errorf("Failed to parse json response: %w", err)
-	}
-
-	latency := delay.Milliseconds()
-	if latency == 0 {
-		latency = time.Since(startTime).Milliseconds()
-	}
-
 	return ResponseServerInfo{
 		IsOnline:         true,
-		MaxPlayers:       status.Players.Max,
-		OnlinePlayers:    status.Players.Online,
-		VersionMinecraft: status.Version.Name,
-		Description:      status.Description.ClearString(),
-		Latency:          latency,
+		MaxPlayers:       *response.Players.Max,
+		OnlinePlayers:    *response.Players.Online,
+		VersionMinecraft: response.Version.NameClean,
+		Description:      response.MOTD.Clean,
+		Latency:          response.Latency,
 	}, nil
 }

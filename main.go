@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"html"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,6 +40,25 @@ var (
 		},
 	}
 )
+
+type Cache struct {
+	mu     sync.RWMutex
+	status ResponseServerInfo
+}
+
+func (c *Cache) Update(status ResponseServerInfo) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.status = status
+}
+
+func (c *Cache) Get() ResponseServerInfo {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.status
+}
+
+var globalCache = &Cache{}
 
 func main() {
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
@@ -72,7 +92,13 @@ func main() {
 	}
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, html.EscapeString("status ok"))
+		w.Header().Set("Content-Type", "application/json")
+
+		status := globalCache.Get()
+
+		if err := json.NewEncoder(w).Encode(status); err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
 	})
 
 	go func() {
@@ -95,10 +121,12 @@ func main() {
 			var onlineStatus = discord.OnlineStatusDND
 
 			if err != nil {
-				log.Println(err)
+				log.Println("Ping background error:", err)
+				globalCache.Update(ResponseServerInfo{IsOnline: false})
 			} else {
 				onlineStatus = discord.OnlineStatusOnline
 				statusText = fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
+				globalCache.Update(status)
 			}
 
 			errDiscord := client.SetPresence(context.Background(),
