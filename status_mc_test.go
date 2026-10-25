@@ -6,6 +6,7 @@ import (
 )
 
 func TestPingMinecraftJavaServer(t *testing.T) {
+	loadConfig()
 	status, err := pingMinecraftJavaServer()
 
 	if err != nil {

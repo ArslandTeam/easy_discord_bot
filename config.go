@@ -8,14 +8,17 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/disgoorg/snowflake/v2"
 	"github.com/joho/godotenv"
 )
 
 var (
 	token            string
-	guildID          string
+	guildID          snowflake.ID
+	verifiedRoleID   snowflake.ID
 	address          string
 	port             string
+	databaseUrl      string
 	minecraftAddress string
 	minecraftPort    uint16
 	pingInterval     time.Duration
@@ -41,14 +44,25 @@ func loadConfig() {
 	}
 
 	token = os.Getenv("TOKEN")
-	guildID = os.Getenv("GUILD_ID")
+	guildID, err = snowflake.Parse(os.Getenv("GUILD_ID"))
+	if err != nil {
+		log.Printf("GUILD_ID key error: %v", err)
+		return
+	}
+	verifiedRoleID, err = snowflake.Parse(os.Getenv("VERIFIED_ROLE_ID"))
+	if err != nil {
+		log.Printf("GUILD_ID key error: %v", err)
+		return
+	}
+
 	address = os.Getenv("ADDRESS")
 	port = os.Getenv("PORT")
+	databaseUrl = os.Getenv("DATABASE_URL")
 	minecraftAddress = os.Getenv("MINECRAFT_ADDRESS")
 
 	val, err := strconv.ParseUint(os.Getenv("MINECRAFT_PORT"), 10, 16)
 	if err != nil {
-		log.Fatal("MINECRAFT_PORT not set or invalid")
+		log.Fatal("MINECRAFT_PORT key error: %w", err)
 	}
 	minecraftPort = uint16(val)
 

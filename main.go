@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	_ "github.com/lib/pq"
 
 	"github.com/disgoorg/disgo"
 	"github.com/disgoorg/disgo/bot"
@@ -39,6 +42,7 @@ var (
 			},
 		},
 	}
+	db *sql.DB
 )
 
 type Cache struct {
@@ -68,15 +72,24 @@ func main() {
 
 	loadConfig()
 
+	var err error
+	db, err = sql.Open("postgres", databaseUrl)
+	if err != nil {
+		log.Fatalf("Error connect Database: %v", err)
+	}
+	defer db.Close()
+
 	client, err := disgo.New(token,
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(
 				gateway.IntentGuilds,
 				gateway.IntentGuildMessages,
 				gateway.IntentDirectMessages,
+				gateway.IntentGuildMembers,
 			),
 		),
 		bot.WithEventListenerFunc(commandListener),
+		bot.WithEventListenerFunc(guildMemberJoinListener),
 	)
 
 	if err != nil {
@@ -91,11 +104,11 @@ func main() {
 		panic(err)
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-
 		status := globalCache.Get()
-
 		if err := json.NewEncoder(w).Encode(status); err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
@@ -105,7 +118,7 @@ func main() {
 
 		s := &http.Server{
 			Addr:           fmt.Sprintf("%s:%s", address, port),
-			Handler:        handler,
+			Handler:        mux,
 			ReadTimeout:    10 * time.Second,
 			WriteTimeout:   10 * time.Second,
 			MaxHeaderBytes: 1 << 20,
@@ -146,6 +159,37 @@ func main() {
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM)
 	<-s
 	client.Close(context.TODO())
+}
+
+func checkAndAssignRole(client bot.Client, guildsnowflakeID snowflake.ID, userID snowflake.ID) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM users WHERE discordId = $1)`
+
+	err := db.QueryRow(query, userID.String()).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("%w", err)
+	}
+
+	if exists {
+		err = client.Rest.AddMemberRole(guildsnowflakeID, userID, verifiedRoleID)
+		if err != nil {
+			return true, fmt.Errorf("%w", err)
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func guildMemberJoinListener(event *events.GuildMemberJoin) {
+	if event.GuildID != guildID {
+		return
+	}
+
+	_, err := checkAndAssignRole(*event.Client(), event.GuildID, event.Member.User.ID)
+	if err != nil {
+		log.Printf("%s: %v", event.Member.User.ID, err)
+	}
 }
 
 func commandListener(event *events.ApplicationCommandInteractionCreate) {
