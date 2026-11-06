@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -57,7 +58,17 @@ func loadConfig() {
 
 	address = os.Getenv("ADDRESS")
 	port = os.Getenv("PORT")
-	databaseUrl = os.Getenv("DATABASE_URL")
+	dbUser := os.Getenv("DB_USER")
+	dbPass := os.Getenv("DB_PASS")
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+
+	encodedPass := url.QueryEscape(dbPass)
+
+	databaseUrl = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		dbUser, encodedPass, dbHost, dbPort, dbName,
+	)
 	minecraftAddress = os.Getenv("MINECRAFT_ADDRESS")
 
 	val, err := strconv.ParseUint(os.Getenv("MINECRAFT_PORT"), 10, 16)

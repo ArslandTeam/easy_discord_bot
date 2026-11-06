@@ -21,12 +21,14 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
+	"github.com/disgoorg/omit"
 	"github.com/disgoorg/snowflake/v2"
 )
 
 // INFO позже вынести var ( commands ) в отдельный модуль
 var (
-	commands = []discord.ApplicationCommandCreate{
+	adminPerms = discord.PermissionAdministrator
+	commands   = []discord.ApplicationCommandCreate{
 		discord.SlashCommandCreate{
 			Name:        "ping",
 			Description: "get status server minecraft",
@@ -40,6 +42,14 @@ var (
 			DescriptionLocalizations: map[discord.Locale]string{
 				discord.LocaleRussian: "получить полную ифнормацию о сервере",
 			},
+		},
+		discord.SlashCommandCreate{
+			Name:        "check",
+			Description: "Check database and assign verify roles to linked users",
+			DescriptionLocalizations: map[discord.Locale]string{
+				discord.LocaleRussian: "проверить базу данных и выдать роли верификации привязанным пользователям",
+			},
+			DefaultMemberPermissions: omit.New(&adminPerms),
 		},
 	}
 	db *sql.DB
@@ -234,5 +244,57 @@ func commandListener(event *events.ApplicationCommandInteractionCreate) {
 		if err != nil {
 			event.Client().Logger.Error("error on sending response", slog.Any("err", err))
 		}
+	}
+
+	if data.CommandName() == "check" {
+		verifiedCount := 0
+
+		if err := event.DeferCreateMessage(true); err != nil {
+			event.Client().Logger.Error("error on deferring response", slog.Any("err", err))
+			return
+		}
+
+		go func() {
+			ctx := context.Background()
+			rows, err := db.QueryContext(ctx, `SELECT "discordId" FROM users WHERE "discordId" IS NOT NULL`)
+			if err != nil {
+				event.Client().Logger.Error("error fetch users in DB", slog.Any("err", err))
+				_, _ = event.Client().Rest.UpdateInteractionResponse(event.ApplicationID(), event.Token(),
+					discord.NewMessageUpdate().WithContent("Ошибка при чтении базы данных."))
+				return
+			}
+			defer rows.Close()
+
+			for rows.Next() {
+				var discordIDStr string
+				if err := rows.Scan(&discordIDStr); err != nil {
+					continue
+				}
+
+				userID, err := snowflake.Parse(discordIDStr)
+				if err != nil {
+					continue
+				}
+
+				err = event.Client().Rest.AddMemberRole(guildID, userID, verifiedRoleID)
+				if err != nil {
+					event.Client().Logger.Debug(fmt.Sprintf("Could not add role to %s (maybe left server?)", discordIDStr))
+					continue
+				}
+
+				verifiedCount++
+			}
+
+			if err = rows.Err(); err != nil {
+				event.Client().Logger.Error("error occurred during database rows iteration", slog.Any("err", err))
+				_, _ = event.Client().Rest.UpdateInteractionResponse(event.ApplicationID(), event.Token(),
+					discord.NewMessageUpdate().WithContent("В процессе чтения базы данных произошла ошибка. Часть пользователей могла быть не обработана."))
+				return
+			}
+
+			_, _ = event.Client().Rest.UpdateInteractionResponse(event.ApplicationID(), event.Token(),
+				discord.NewMessageUpdate().WithContent(fmt.Sprintf("Верифицировано %d пользователям из БД.", verifiedCount)))
+		}()
+
 	}
 }
