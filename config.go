@@ -57,6 +57,9 @@ func loadConfig() {
 		return
 	}
 
+	address = os.Getenv("ADDRESS")
+	port = os.Getenv("PORT")
+
 	databaseUrl = os.Getenv("DATABASE_URL")
 	minecraftAddress = os.Getenv("MINECRAFT_ADDRESS")
 
