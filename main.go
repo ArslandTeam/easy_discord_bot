@@ -211,7 +211,7 @@ func updatePresence(client *bot.Client) {
 func checkAndAssignRole(client bot.Client, guildsnowflakeID snowflake.ID, userID snowflake.ID) (bool, error) {
 	var exists bool
 
-	err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE discordId = $1)`, userID.String()).Scan(&exists)
+	err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE "discordId" = $1)`, userID.String()).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("%w", err)
 	}
