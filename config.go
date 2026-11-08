@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -14,7 +13,8 @@ import (
 )
 
 var (
-	token            string
+	discordToken     string
+	expectedToken    string
 	guildID          snowflake.ID
 	verifiedRoleID   snowflake.ID
 	address          string
@@ -44,7 +44,8 @@ func loadConfig() {
 		log.Println("Warning: .env file not found, using system environment variables")
 	}
 
-	token = os.Getenv("TOKEN")
+	discordToken = os.Getenv("DISCORD_TOKEN")
+	expectedToken = os.Getenv("EXPECTED_TOKEN")
 	guildID, err = snowflake.Parse(os.Getenv("GUILD_ID"))
 	if err != nil {
 		log.Printf("GUILD_ID key error: %v", err)
@@ -56,19 +57,7 @@ func loadConfig() {
 		return
 	}
 
-	address = os.Getenv("ADDRESS")
-	port = os.Getenv("PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPass := os.Getenv("DB_PASS")
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbName := os.Getenv("DB_NAME")
-
-	encodedPass := url.QueryEscape(dbPass)
-
-	databaseUrl = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		dbUser, encodedPass, dbHost, dbPort, dbName,
-	)
+	databaseUrl = os.Getenv("DATABASE_URL")
 	minecraftAddress = os.Getenv("MINECRAFT_ADDRESS")
 
 	val, err := strconv.ParseUint(os.Getenv("MINECRAFT_PORT"), 10, 16)

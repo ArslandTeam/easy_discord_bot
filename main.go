@@ -89,7 +89,7 @@ func main() {
 	}
 	defer db.Close()
 
-	client, err := disgo.New(token,
+	client, err := disgo.New(discordToken,
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(
 				gateway.IntentGuilds,
@@ -116,12 +116,46 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		status := globalCache.Get()
 		if err := json.NewEncoder(w).Encode(status); err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
+	})
+
+	mux.HandleFunc("GET /verify", func(w http.ResponseWriter, r *http.Request) {
+		authToken := r.Header.Get("X-Authentication-Token")
+		if authToken != expectedToken {
+			http.Error(w, "Unauthorized: Invalid or missing token", http.StatusUnauthorized)
+			return
+		}
+
+		userId := r.URL.Query().Get("user_id")
+		if userId == "" {
+			http.Error(w, "Bad Request: Missing user_id parameter", http.StatusBadRequest)
+			return
+		}
+
+		parsedUserId, err := snowflake.Parse(userId)
+		if err != nil {
+			http.Error(w, "Bad Request: Invalid user_id format", http.StatusBadRequest)
+			return
+		}
+
+		existsUser, err := checkAndAssignRole(*client, guildID, parsedUserId)
+		if err != nil {
+			log.Printf("Error in checkAndAssignRole for user %s: %v", userId, err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		if !existsUser {
+			http.Error(w, "User not found in database", http.StatusNotFound)
+			return
+		}
+
+		w.Write([]byte("OK"))
 	})
 
 	go func() {
@@ -137,33 +171,12 @@ func main() {
 		log.Fatal(s.ListenAndServe())
 	}()
 
-	go func(client *bot.Client) {
+	go func() {
 		for {
-			status, err := pingMinecraftJavaServer()
-			var statusText = "Server offline"
-			var onlineStatus = discord.OnlineStatusDND
-
-			if err != nil {
-				log.Println("Ping background error:", err)
-				globalCache.Update(ResponseServerInfo{IsOnline: false})
-			} else {
-				onlineStatus = discord.OnlineStatusOnline
-				statusText = fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
-				globalCache.Update(status)
-			}
-
-			errDiscord := client.SetPresence(context.Background(),
-				gateway.WithOnlineStatus(onlineStatus),
-				gateway.WithCustomActivity(statusText),
-			)
-
-			if errDiscord != nil {
-				log.Println(errDiscord)
-			}
-
+			updatePresence(client)
 			time.Sleep(pingInterval)
 		}
-	}(client)
+	}()
 
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM)
@@ -171,11 +184,34 @@ func main() {
 	client.Close(context.TODO())
 }
 
+func updatePresence(client *bot.Client) {
+	status, err := pingMinecraftJavaServer()
+	var statusText = "Server offline"
+	var onlineStatus = discord.OnlineStatusDND
+
+	if err != nil {
+		log.Println("Ping background error:", err)
+		globalCache.Update(ResponseServerInfo{IsOnline: false})
+	} else {
+		onlineStatus = discord.OnlineStatusOnline
+		statusText = fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
+		globalCache.Update(status)
+	}
+
+	errDiscord := client.SetPresence(context.Background(),
+		gateway.WithOnlineStatus(onlineStatus),
+		gateway.WithCustomActivity(statusText),
+	)
+
+	if errDiscord != nil {
+		log.Println(errDiscord)
+	}
+}
+
 func checkAndAssignRole(client bot.Client, guildsnowflakeID snowflake.ID, userID snowflake.ID) (bool, error) {
 	var exists bool
-	query := `SELECT EXISTS(SELECT 1 FROM users WHERE discordId = $1)`
 
-	err := db.QueryRow(query, userID.String()).Scan(&exists)
+	err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE discordId = $1)`, userID.String()).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("%w", err)
 	}
@@ -205,18 +241,15 @@ func guildMemberJoinListener(event *events.GuildMemberJoin) {
 func commandListener(event *events.ApplicationCommandInteractionCreate) {
 	data := event.SlashCommandInteractionData()
 	if data.CommandName() == "ping" {
-		status, err := pingMinecraftJavaServer()
+		updatePresence(event.Client())
 
-		if err != nil {
-			log.Println(err)
-			err = event.CreateMessage(discord.NewMessageCreate().WithContent("Server offline"))
+		status := globalCache.Get()
+
+		if !status.IsOnline {
+			event.CreateMessage(discord.NewMessageCreate().WithContent("Server offline"))
 		} else {
 			statusText := fmt.Sprintf("Online: %d/%d", status.OnlinePlayers, status.MaxPlayers)
-			err = event.CreateMessage(discord.NewMessageCreate().WithContent(statusText))
-		}
-
-		if err != nil {
-			event.Client().Logger.Error("error on sending response", slog.Any("err", err))
+			event.CreateMessage(discord.NewMessageCreate().WithContent(statusText))
 		}
 	}
 
